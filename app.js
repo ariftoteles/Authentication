@@ -6,6 +6,8 @@ const mongoose = require("mongoose");
 const session = require("express-session");
 const passport = require("passport");
 const passportLocalMongoose = require("passport-local-mongoose");
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const findOrCreate = require('mongoose-findorcreate')
 
 const app = express();
 
@@ -34,23 +36,58 @@ mongoose.set("useCreateIndex", true); // ignore depreciate warning
 
 const userSchema = new mongoose.Schema({
     email: String,
-    password: String
+    password: String,
+    googleId: String // to save googleID in database local
 });
 // use passport local mongoose plugin to set up user schema
 userSchema.plugin(passportLocalMongoose);
+// add plugin findorcreate
+userSchema.plugin(findOrCreate);
 
 const User = new mongoose.model("User", userSchema);
 
 // use passport local mongoose to create login local strategy
 passport.use(User.createStrategy());
 
-// setup passport to serialize and deserialize use
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser());
+// setup passport to serialize and deserialize 
+passport.serializeUser(function(user, done) {
+    done(null, user.id);
+  });
+  
+  passport.deserializeUser(function(id, done) {
+    User.findById(id, function(err, user) {
+      done(err, user);
+    });
+  });
+ // setup passport using google strategy 
+passport.use(new GoogleStrategy({
+    clientID: process.env.CLIENT_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    callbackURL: "http://localhost:3000/auth/google/secrets"
+  },
+  function(accessToken, refreshToken, profile, cb) {
+    console.log(profile);
+    User.findOrCreate({ googleId: profile.id }, function (err, user) {
+      return cb(err, user);
+    });
+  }
+));
 
+
+// =================ROUTING===================//
 app.get("/", function (req, res) {
     res.render("home");
 });
+
+app.get("/auth/google",
+  passport.authenticate("google", { scope: ["profile"] }));
+
+app.get("/auth/google/secrets", 
+  passport.authenticate("google", { failureRedirect: "/login" }),
+  function(req, res) {
+    // Successful authentication, redirect secret.
+    res.redirect("/secrets");
+  });
 
 app.get("/register", function (req, res) {
     res.render("register");
