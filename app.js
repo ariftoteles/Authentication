@@ -38,6 +38,7 @@ mongoose.set("useCreateIndex", true); // ignore depreciate warning
 const userSchema = new mongoose.Schema({
     email: String,
     password: String,
+    secret: String,
     googleId: String, // to save googleID in database local
     facebookId: String // to save facebookID database local
 });
@@ -169,16 +170,44 @@ app.post("/login", function (req, res) {
 
 app.get("/secrets", function (req, res) {
     if (req.isAuthenticated()) {
-        res.render("secrets");
+        User.findById(req.user.id, function(err, foundUser){
+            res.render("secrets", {userWithSecret: foundUser.secret});
+        });
+    } else {
+        res.render("secrets", {userWithSecret: null});
+    }
+});
+
+app.get("/submit", function (req, res) {
+    if (req.isAuthenticated()) {
+        res.render("submit");
     } else {
         res.redirect("/login");
     }
 });
 
+app.post("/submit", function(req, res){
+    const submitedSecret = req.body.secret;
+    // console.log(req.user.id);
+    User.findById(req.user.id, function(err, foundUser){
+        if(err){
+            console.log(err);
+        } else {
+            if(foundUser){
+                foundUser.secret = submitedSecret;
+                foundUser.save(function(){
+                    res.redirect("/secrets");
+                });
+                console.log(foundUser);
+            }
+        }
+    });
+});
+
 app.get("/logout", function (req, res) {
     req.logout();
     res.redirect("/");
-})
+});
 
 app.listen(3000, function () {
     console.log("Server starting on port 3000");
